@@ -20,7 +20,7 @@ Deno.serve(async(req:Request)=>{
  if(!me||!me.active)return reply({error:'Seu acesso ainda não foi liberado. Peça ao administrador.'},403);
  const admin=me.role==='admin';
  if(req.method==='GET'){
- const [er,sr,mr]=await Promise.all([db.from('racing_events').select('*'),admin?db.from('racing_sales').select('*'):db.from('racing_sales').select('*').eq('seller',email),admin?db.from('racing_members').select('*'):Promise.resolve({data:[],error:null})]);
+ const [er,sr,mr]=await Promise.all([db.from('racing_events').select('*').eq('deleted',false),admin?db.from('racing_sales').select('*'):db.from('racing_sales').select('*').eq('seller',email),admin?db.from('racing_members').select('*'):Promise.resolve({data:[],error:null})]);
  for(const r of [er,sr,mr])if(r.error)throw r.error;
  return reply({me,events:er.data,sales:sr.data?.map(s=>({...s,eventId:s.event_id})),members:mr.data});
  }
@@ -29,7 +29,7 @@ Deno.serve(async(req:Request)=>{
  const s=body.sale;if(!s||typeof s.id!=='string'||!/^[-\w]{10,80}$/.test(s.id))return reply({error:'Venda inválida'},400);
  const {data:previous,error:prevError}=await db.from('racing_sales').select('seller').eq('id',s.id).maybeSingle();if(prevError)throw prevError;
  if(previous)return previous.seller===email?reply({ok:true}):reply({error:'Código de venda já utilizado'},409);
- const {data:event,error:evError}=await db.from('racing_events').select('status').eq('id',s.eventId).maybeSingle();if(evError)throw evError;
+ const {data:event,error:evError}=await db.from('racing_events').select('status').eq('id',s.eventId).eq('deleted',false).maybeSingle();if(evError)throw evError;
  if(!event||event.status!=='open')return reply({error:'Evento encerrado ou indisponível. A venda continua salva neste celular.'},400);
  if(!Array.isArray(s.items)||s.items.length<1||s.items.length>100)return reply({error:'Adicione produtos'},400);
  const items=s.items.map((i:any)=>{if(typeof i.barcode!=='string'||!i.barcode.trim()||(i.description!=null&&typeof i.description!=='string')||!Number.isSafeInteger(i.qty)||i.qty<1||i.qty>10000||!Number.isSafeInteger(i.price)||i.price<0||i.price>100000000)throw Error('Confira código, quantidade e preço');return {barcode:i.barcode.trim().slice(0,100),description:(i.description??'').trim().slice(0,200),qty:i.qty,price:i.price};});
@@ -45,6 +45,11 @@ Deno.serve(async(req:Request)=>{
  if(body.action==='event'){
  if(typeof body.name!=='string'||!body.name.trim()||!/^\d{4}-\d{2}-\d{2}$/.test(body.date))return reply({error:'Informe nome e data'},400);
  const {error}=await db.from('racing_events').insert({id:crypto.randomUUID(),name:body.name.trim().slice(0,120),date:body.date});if(error)throw error;
+ }else if(body.action==='eventUpdate'||body.action==='eventDelete'){
+ const {data:existing,error:lookupError}=await db.from('racing_events').select('*').eq('id',body.id).eq('deleted',false).maybeSingle();if(lookupError)throw lookupError;if(!existing)return reply({error:'Evento não encontrado'},404);
+ if(body.action==='eventUpdate'&&(typeof body.name!=='string'||!body.name.trim()||!/^\d{4}-\d{2}-\d{2}$/.test(body.date)||isNaN(new Date(body.date+'T12:00:00').getTime())))return reply({error:'Informe nome e data válidos'},400);
+ const changes=body.action==='eventDelete'?{deleted:true,status:'closed'}:{name:body.name.trim().slice(0,120),date:body.date};
+ const {error}=await db.from('racing_events').update(changes).eq('id',body.id).eq('deleted',false);if(error)throw error;
  }else if(body.action==='eventStatus'){
  if(!['open','closed'].includes(body.status))return reply({error:'Status inválido'},400);
  const {error}=await db.from('racing_events').update({status:body.status}).eq('id',body.id);if(error)throw error;
