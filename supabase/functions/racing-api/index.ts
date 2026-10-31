@@ -32,7 +32,8 @@ Deno.serve(async(req:Request)=>{
  const {data:event,error:evError}=await db.from('racing_events').select('status').eq('id',s.eventId).eq('deleted',false).maybeSingle();if(evError)throw evError;
  if(!event||event.status!=='open')return reply({error:'Evento encerrado ou indisponível. A venda continua salva neste celular.'},400);
  if(!Array.isArray(s.items)||s.items.length<1||s.items.length>100)return reply({error:'Adicione produtos'},400);
- const items=s.items.map((i:any)=>{if(typeof i.barcode!=='string'||!i.barcode.trim()||(i.description!=null&&typeof i.description!=='string')||!Number.isSafeInteger(i.qty)||i.qty<1||i.qty>10000||!Number.isSafeInteger(i.price)||i.price<0||i.price>100000000)throw Error('Confira código, quantidade e preço');return {barcode:i.barcode.trim().slice(0,100),description:(i.description??'').trim().slice(0,200),qty:i.qty,price:i.price};});
+ const items=s.items.map((i:any)=>{const price=i.price==null||i.price===''?null:i.price;if((i.barcode!=null&&typeof i.barcode!=='string')||(i.description!=null&&typeof i.description!=='string')||!Number.isSafeInteger(i.qty)||i.qty<1||i.qty>10000||(price!==null&&(!Number.isSafeInteger(price)||price<0||price>100000000)))throw Error('Confira a quantidade e, se informado, o preço');return {barcode:(i.barcode??'').trim().slice(0,100),description:(i.description??'').trim().slice(0,200),qty:i.qty,price};});
+ s.discount=s.discount??0;s.payment=s.payment||'Outro';
  const gross=items.reduce((n:number,i:any)=>n+i.qty*i.price,0);
  if(!Number.isSafeInteger(s.discount)||s.discount<0||s.discount>gross)return reply({error:'Desconto inválido'},400);
  if(!['Pix','Dinheiro','Crédito','Débito','Outro'].includes(s.payment))return reply({error:'Pagamento inválido'},400);

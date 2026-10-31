@@ -15,6 +15,8 @@ assert.equal((await call('admin',{action:'sale',sale:sale()})).status,200);
 const seller=(await call('seller')).data;assert.equal(seller.sales.length,1);assert.equal(seller.members.length,0);assert.equal((await call('admin')).data.sales.length,2);
 assert.equal((await call('seller',{action:'event',name:'Forbidden',date:'2026-10-31'})).status,403);assert.equal((await call('seller',{action:'member',email:'bad@test.local',name:'Bad',role:'admin'})).status,403);assert.equal((await call('seller',{action:'cancel',id:first.id})).status,403);
 assert.equal((await call('admin',{action:'sale',sale:{...sale(),discount:999999}})).status,400);
+for(const item of [{qty:3},{qty:1,description:'Luva'},{qty:2,barcode:'00123'},{qty:1,price:0}]){const optional=sale();optional.items=[item];delete optional.payment;delete optional.discount;assert.equal((await call('seller',{action:'sale',sale:optional})).status,200);const saved=tables.racing_sales.pop();assert.equal(saved.total,0);assert.equal(saved.items[0].price,item.price??null);}
+for(const qty of [undefined,0,-1,1.5]){const invalid=sale();invalid.items=[{qty}];assert.equal((await call('seller',{action:'sale',sale:invalid})).status,400);}
 await call('admin',{action:'eventStatus',id:'event-test-123',status:'closed'});assert.equal((await call('seller',{action:'sale',sale:sale()})).status,400);assert.equal((await call('seller',{action:'sale',sale:first})).status,200);
 assert.equal((await call('seller',{action:'eventUpdate',id:'event-test-123',name:'No',date:'2026-11-01'})).status,403);
 assert.equal((await call('seller',{action:'eventDelete',id:'event-test-123'})).status,403);
